@@ -1,0 +1,53 @@
+# Binaries and build artifacts
+*.exe
+*.out
+*.o
+*.so
+*.a
+*.dll
+*.dylib
+bootstrap
+*.class
+
+# Go build output
+/bin/
+/pkg/
+/vendor/
+/*.test
+
+# SAM build directory
+.aws-sam/
+
+# SAM/CloudFormation artifacts
+build/
+build.toml
+
+# Environment files
+.env
+
+# SQLite and local database files
+*.db
+
+# VSCode and IDE
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Node modules (if applicable)
+node_modules/
+package-lock.json
+
+# Backup/Temporary files
+*~
+*.swp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# System files
+desktop.ini

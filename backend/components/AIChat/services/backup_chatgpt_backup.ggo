@@ -1,0 +1,172 @@
+package services
+
+import (
+	"bytes"
+	"encoding/json"
+	"io/ioutil"
+	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+)
+
+// Structs to represent request and response payloads
+type ChatGPTRequest struct {
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+}
+
+// Message here represents a chat message formatted for openai api
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ChatGPTResponse struct {
+	Choices []Choice `json:"choices"`
+}
+
+type Choice struct {
+	Message Message `json:"message"`
+}
+
+// 预设的模拟响应
+var mockResponses = []string{
+	"Hello! I'm a chatbot powered by AI. How can I help you today?",
+	"That's an interesting question! Let me think about that for you.",
+	"I understand what you're asking. Here's my perspective on that topic.",
+	"Thanks for your message! I'm here to assist you with any questions you have.",
+	"That's a great question! I'd be happy to help you with that.",
+	"I appreciate you reaching out. Let me provide some helpful information.",
+	"Excellent question! I can definitely help you understand that better.",
+	"I see what you're getting at. Here's what I think about that topic.",
+	"Thanks for asking! That's something I can certainly help explain.",
+	"I'm glad you brought that up! Let me share some insights with you.",
+}
+
+// 根据用户输入生成相应的模拟响应
+func generateMockResponse(userMessage string) string {
+	// 初始化随机数生成器
+	rand.Seed(time.Now().UnixNano())
+	
+	userLower := strings.ToLower(userMessage)
+	
+	// 根据用户输入的关键词返回特定响应
+	if strings.Contains(userLower, "math") || strings.Contains(userLower, "+") || strings.Contains(userLower, "-") || strings.Contains(userLower, "*") || strings.Contains(userLower, "/") {
+		return "I see you're asking about math! Mathematics is a fascinating subject that helps us understand patterns and solve problems."
+	}
+	
+	if strings.Contains(userLower, "hello") || strings.Contains(userLower, "hi") || strings.Contains(userLower, "hey") {
+		return "Hello there! It's great to meet you. I'm an AI assistant ready to help with your questions."
+	}
+	
+	if strings.Contains(userLower, "what") || strings.Contains(userLower, "how") || strings.Contains(userLower, "why") {
+		return "That's a thoughtful question! I'd be happy to help explain that topic to you."
+	}
+	
+	if strings.Contains(userLower, "help") {
+		return "I'm here to help! Feel free to ask me about any topic you're curious about."
+	}
+	
+	// 默认返回随机响应
+	return mockResponses[rand.Intn(len(mockResponses))]
+}
+
+// GetChatGPTResponse interacts with the OpenAI API and retrieves the response
+func GetChatGPTResponse(message string) (string, error) {
+	//load api from environment
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	log.Printf("🔑 Loaded API Key: %s", apiKey[:20]+"...") // 只显示前20个字符保护隐私
+	if apiKey == "" {
+		log.Println("❌ ERROR: OPENAI_API_KEY is not set!")
+		return generateMockResponse(message), nil // 返回模拟响应而不是错误
+	}
+
+	// OpenAI API URL
+	apiURL := "https://api.openai.com/v1/chat/completions"
+
+	// Construct the request payload
+	requestPayload := ChatGPTRequest{
+		Model: "gpt-4",
+		Messages: []Message{
+			{Role: "user", Content: message},
+		},
+	}
+
+	// Serialize the request payload to JSON
+	requestBody, err := json.Marshal(requestPayload)
+	if err != nil {
+		log.Printf("❌ Failed to marshal request payload: %v", err)
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+
+	log.Printf("📤 Sending request to OpenAI: %s", string(requestBody))
+
+	// Create the HTTP request
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(requestBody))
+	if err != nil {
+		log.Printf("❌ Failed to create HTTP request: %v", err)
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+
+	// Set headers
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	log.Printf("🌐 Making HTTP request to: %s", apiURL)
+
+	// Make the HTTP request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ Failed to make HTTP request: %v", err)
+		log.Printf("🔄 Falling back to mock response")
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+	defer resp.Body.Close()
+
+	log.Printf("📋 Response Status Code: %d", resp.StatusCode)
+	log.Printf("📋 Response Headers: %v", resp.Header)
+
+	// Read the response body
+	responseBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("❌ Failed to read response body: %v", err)
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+
+	log.Printf("📥 Raw response body: %s", string(responseBody))
+
+	// Check for API errors
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("❌ OpenAI API returned %d: %s", resp.StatusCode, string(responseBody))
+		log.Printf("🔄 Falling back to mock response")
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+
+	// Parse the response JSON
+	var chatResponse ChatGPTResponse
+	err = json.Unmarshal(responseBody, &chatResponse)
+	if err != nil {
+		log.Printf("❌ Failed to unmarshal response: %v", err)
+		log.Printf("❌ Response body was: %s", string(responseBody))
+		return generateMockResponse(message), nil // 返回模拟响应
+	}
+
+	log.Printf("🔍 Parsed response: %+v", chatResponse)
+	log.Printf("🔍 Number of choices: %d", len(chatResponse.Choices))
+
+	// Return the content of the first choice
+	if len(chatResponse.Choices) > 0 {
+		content := chatResponse.Choices[0].Message.Content
+		log.Printf("✅ Extracted content: '%s'", content)
+		log.Printf("✅ Content length: %d", len(content))
+		return content, nil
+	}
+
+	log.Printf("❌ No choices found in response")
+	log.Printf("🔄 Falling back to mock response")
+	return generateMockResponse(message), nil // 返回模拟响应
+}

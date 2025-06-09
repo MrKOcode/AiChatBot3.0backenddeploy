@@ -1,0 +1,53 @@
+<mxfile host="65bd71144e">
+    <diagram id="jmhfkyVYq4tbXPTpWqVK" name="Page-1">
+        <mxGraphModel dx="991" dy="419" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="1600" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="15" style="edgeStyle=none;html=1;" edge="1" parent="1" source="3" target="4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="Reading material display" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="90" width="150" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="Trigger by typing &quot;Move on:&quot;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="210" y="90" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="Assessment question appears&lt;div&gt;&lt;br&gt;&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="90" width="130" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" style="edgeStyle=none;html=1;" edge="1" parent="1" source="4">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="390" y="120" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="8" value="User submits answert" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="570" y="80" width="130" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="Conversation history sent to OpenAI" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="750" y="90" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" style="edgeStyle=none;html=1;" edge="1" parent="1" source="8">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="740" y="110" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="12" value="Feedback stored in DB" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="920" y="70" width="145" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" style="edgeStyle=none;html=1;entryX=-0.014;entryY=0.588;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="10" target="12">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" style="edgeStyle=none;html=1;entryX=-0.008;entryY=0.633;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="6" target="8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;submitAssessment (New handler)&lt;/h1&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;p&gt;func submitAssessment(c *gin.Context) {&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;white-space: normal;&quot;&gt;&lt;span style=&quot;white-space:pre&quot;&gt;&#x9;&lt;/span&gt;var req struct {&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;white-space: normal;&quot;&gt;&lt;span style=&quot;white-space:pre&quot;&gt;&#x9;&#x9;&lt;/span&gt;ConversationID int64&amp;nbsp; `json:&quot;conversationId&quot;`&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;white-space: normal;&quot;&gt;&lt;span style=&quot;white-space:pre&quot;&gt;&#x9;&#x9;&lt;/span&gt;UserAnswer&amp;nbsp; &amp;nbsp; &amp;nbsp;string `json:&quot;userAnswer&quot;`&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;white-space: normal;&quot;&gt;&lt;span style=&quot;white-space:pre&quot;&gt;&#x9;&#x9;&lt;/span&gt;CorrectAnswer&amp;nbsp; string `json:&quot;correctAnswer&quot;`&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot;white-space: normal;&quot;&gt;&lt;span style=&quot;white-space:pre&quot;&gt;&#x9;&lt;/span&gt;}&lt;/span&gt;&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="160" width="430" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;POST request to /api/assessment/submit&lt;/h1&gt;&lt;p&gt;{&lt;/p&gt;&lt;p&gt;&amp;nbsp; &quot;conversationId&quot;: 123,&lt;/p&gt;&lt;p&gt;&amp;nbsp; &quot;userAnswer&quot;: &quot;Inertia is when an object stays in motion unless stopped.&quot;,&lt;/p&gt;&lt;p&gt;&amp;nbsp; &quot;correctAnswer&quot;: &quot;Inertia is the tendency of an object to resist changes in its state of motion.&quot;&lt;/p&gt;&lt;p&gt;}&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="20" y="440" width="380" height="240" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
