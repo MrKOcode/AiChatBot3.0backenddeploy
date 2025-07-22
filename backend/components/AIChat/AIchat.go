@@ -170,14 +170,6 @@ func createConversation(c *gin.Context) {
 		"conversation":   gin.H{"title": "New Academic Chat"},
 	})
 
-	// 3. Ask if ready
-	followUp := "Are you ready to do a self-assessment? Type 'yes' to continue or 'no' to get more learning materials."
-	saveMessageWithHistory(id, req.UserID, "chatbot", followUp)
-
-	c.JSON(http.StatusOK, gin.H{
-		"conversationId": id,
-		"conversation":   gin.H{"title": "Self-Assessment on Inertia"},
-	})
 }
 
 func fetchConversations(c *gin.Context) {
@@ -197,7 +189,7 @@ func fetchConversations(c *gin.Context) {
 }
 
 func OffTopic(c *gin.Context, convoId int64, userId string) {
-	redirectMsg := "Off topic detected. Please stay on topic about Newton's First Law of Motion and inertia."
+	redirectMsg := "This topic is not allowed. Please choose a different topic for your study session."
 	saveMessageWithHistory(convoId, userId, "system", redirectMsg)
 	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": redirectMsg, "role": "system"}})
 }
@@ -316,7 +308,7 @@ Here is the full conversation:
 			feedback, _ := services.GetChatGPTResponse(fullPrompt)
 
 			saveMessageWithHistory(convoId, userId, "system", feedback)
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "system"}})
+			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
 			return true
 		}
 	}
@@ -325,9 +317,21 @@ Here is the full conversation:
 
 // 4. Fallback generic chatbot response
 func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId string) {
+	//1. Call ChatGPT API for a fallback response
 	resp, _ := services.GetChatGPTResponse(userMessage)
-	saveMessageWithHistory(convoId, userId, "chatbot", resp)
-	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "chatbot"}})
+
+	//2. Save the response as a chatbot reply
+	saveMessageWithHistory(convoId, userId, "", resp)
+	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
+
+	//3.Send follow-up message about assessment readiness
+	followUp := "Advise me if you finish reading and ready to do a self-assessment to test your understanding of the knowledge."
+	saveMessageWithHistory(convoId, userId, "system", followUp)
+//4.Return the response to the user
+	c.JSON(http.StatusOK, gin.H{"response": gin.H{
+		"content": resp,
+		"role":    "chatbot",
+	}})
 }
 
 func sendMessage(c *gin.Context) {
