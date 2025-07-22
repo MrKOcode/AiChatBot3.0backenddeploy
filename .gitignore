@@ -51,3 +51,8 @@ Thumbs.db
 
 # System files
 desktop.ini
+backend/start_services.sh
+backend/components/AIChat/.env
+backend/components/ChatHistory
+
+

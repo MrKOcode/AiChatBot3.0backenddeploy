@@ -12,7 +12,6 @@ import (
 	"AiChatBotBackend/components/Auth/services"
 )
 
-
 func determineRole(username string) string {
 	if strings.HasPrefix(strings.ToLower(username), "admin") {
 		return "admin"
@@ -47,7 +46,6 @@ func main() {
 	}
 }
 
-
 func registerUser(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
@@ -55,43 +53,43 @@ func registerUser(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unvalid request format"})
 		return
 	}
 
 	if len(req.Username) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名至少需要3个字符"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be at least 3 characters long"})
 		return
 	}
 
 	if len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "密码至少需要6个字符"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters long"})
 		return
 	}
 
 	exists, err := services.UserExists(req.Username)
 	if err != nil {
 		log.Printf("Error checking user existence: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据库错误"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 
 	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already taken"})
 		return
 	}
 
 	userID, err := services.CreateUser(req.Username, req.Password)
 	if err != nil {
 		log.Printf("Error creating user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Create user failed"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "用户创建成功",
-		"userId":  userID,
-		"role":    determineRole(req.Username),
+		"message":  "User registered successfully",
+		"userId":   userID,
+		"role":     determineRole(req.Username),
 		"username": req.Username,
 	})
 }
@@ -103,44 +101,44 @@ func loginUser(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unvalid request format"})
 		return
 	}
 
 	user, err := services.ValidateUser(req.Username, req.Password)
 	if err != nil {
 		if err.Error() == "user not found" || err.Error() == "invalid password" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Username or password is incorrect"})
 			return
 		}
 		log.Printf("Error validating user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据库错误"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "登录成功",
-		"userId":  user.ID,
+		"message":  "Login successful",
+		"userId":   user.ID,
 		"username": user.Username,
-		"role":    user.Role,
+		"role":     user.Role,
 	})
 }
 
 func getUserInfo(c *gin.Context) {
 	userID := c.Param("id")
 	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "需要用户ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
 		return
 	}
 
 	user, err := services.GetUserByID(userID)
 	if err != nil {
 		if err.Error() == "user not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "用户未找到"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
 		log.Printf("Error getting user info: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "数据库错误"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 		return
 	}
 

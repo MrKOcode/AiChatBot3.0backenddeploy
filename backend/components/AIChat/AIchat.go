@@ -145,43 +145,6 @@ func fetchChatHistory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"history": history})
 }
 
-// func createConversation(c *gin.Context) {
-// 	var req struct {
-// 		UserID string `json:"userId"`
-// 	}
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing userId"})
-// 		return
-// 	}
-// 	id, err := services.CreateConversation(req.UserID)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	//Ask OpenAI to generate reading materials
-// 	prompt := "Please generate a approximate 300-word educational reading material about inertia based on Newton's laws of motion. Makie it suitable for students to read before a self-assessment."
-// 	reading, err := services.GetChatGPTResponse(prompt)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "OpenAI failed to generate reading material"})
-// 		return
-// 	}
-
-// 	// Step 3: Save reading as system message
-// 	if err := services.SaveMessage(id, "system", reading); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save reading material"})
-// 		return
-// 	}
-// 	//Follow up by asking ""
-// 	readinessPrompt := "Are you ready to do a self-assessment?"
-// 	if err := services.SaveMessage(id, "system", readinessPrompt); err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save follow-up prompt"})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{"conversationId": id, "conversation": gin.H{"title": "Untitled Conversation"}})
-// }
-
 func createConversation(c *gin.Context) {
 	var req struct {
 		UserID string `json:"userId"`
@@ -198,14 +161,14 @@ func createConversation(c *gin.Context) {
 		return
 	}
 
-	// 2. Generate reading material via OpenAI
-	readingPrompt := "Please generate a 200-word student-friendly reading material explaining the concept of inertia in Newton's First Law of Motion."
-	reading, err := services.GetChatGPTResponse(readingPrompt)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate reading"})
-		return
-	}
-	saveMessageWithHistory(id, req.UserID, "chatbot", reading)
+	//2. Greet the user
+	greeting := "This is your personal AiChatBot, what can I help you study today?"
+	saveMessageWithHistory(id, req.UserID, "chatbot", greeting)
+
+	c.JSON(http.StatusOK, gin.H{
+		"conversationId": id,
+		"conversation":   gin.H{"title": "New Academic Chat"},
+	})
 
 	// 3. Ask if ready
 	followUp := "Are you ready to do a self-assessment? Type 'yes' to continue or 'no' to get more learning materials."
@@ -234,7 +197,7 @@ func fetchConversations(c *gin.Context) {
 }
 
 func OffTopic(c *gin.Context, convoId int64, userId string) {
-	redirectMsg := "We currently do not have an answer to this question. For further assistance, please visit myedmaster.com"
+	redirectMsg := "Off topic detected. Please stay on topic about Newton's First Law of Motion and inertia."
 	saveMessageWithHistory(convoId, userId, "system", redirectMsg)
 	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": redirectMsg, "role": "system"}})
 }
@@ -522,20 +485,20 @@ func deleteConversation(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"conversationId": convoID})
 }
 
+// // Helper function to convert string to int64
 func atoi(s string) int64 {
 	i, _ := strconv.ParseInt(s, 10, 64)
 	return i
 }
 
-// 包装函数：同时保存到本地数据库和ChatHistory服务
+// Helper function to save message and chat history
 func saveMessageWithHistory(convoId int64, userId string, role string, content string) {
-	// 保存到本地数据库
+
 	_ = services.SaveMessage(convoId, role, content)
-	
-	// 保存到 ChatHistory 服务
+
 	if userIdInt, err := strconv.Atoi(userId); err == nil {
-		// 统一 messageType 映射
-		messageType := "ai" // 默认为 ai (system, chatbot 都映射为 ai)
+
+		messageType := "ai"
 		if role == "user" {
 			messageType = "user"
 		}
@@ -543,11 +506,11 @@ func saveMessageWithHistory(convoId int64, userId string, role string, content s
 	}
 }
 
-// 保存聊天记录到ChatHistory服务
 func saveToChatHistory(userId int, conversationId string, messageType string, content string) {
-	// 从Auth服务获取真实用户名
+	// Fetch username from Auth service
+
 	username := getUsernameFromAuth(userId)
-	
+
 	requestData := map[string]interface{}{
 		"userId":         userId,
 		"username":       username,
@@ -555,50 +518,55 @@ func saveToChatHistory(userId int, conversationId string, messageType string, co
 		"messageType":    messageType,
 		"content":        content,
 	}
-	
+
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
 		log.Printf("Error marshaling chat history data: %v", err)
 		return
 	}
-	
+
 	resp, err := http.Post("http://localhost:5004/api/chat-history/save", "application/json", strings.NewReader(string(jsonData)))
 	if err != nil {
 		log.Printf("Error saving to chat history: %v", err)
 		return
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusCreated {
 		log.Printf("Failed to save chat history, status code: %d", resp.StatusCode)
 	} else {
-		log.Printf("✅ Chat history saved: userId=%d, username=%s, %s -> %s", userId, username, messageType, func() string { if len(content) > 50 { return content }; return content }())
+		log.Printf("✅ Chat history saved: userId=%d, username=%s, %s -> %s", userId, username, messageType, func() string {
+			if len(content) > 50 {
+				return content
+			}
+			return content
+		}())
 	}
 }
 
-// 从Auth服务获取用户名
+// Helper function to get username from Auth service
 func getUsernameFromAuth(userId int) string {
 	resp, err := http.Get(fmt.Sprintf("http://localhost:5002/api/auth/user/%d", userId))
 	if err != nil {
 		log.Printf("Error fetching username from auth service: %v", err)
-		return fmt.Sprintf("user_%d", userId) // 备用方案
+		return fmt.Sprintf("user_%d", userId)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Auth service returned status %d for user %d", resp.StatusCode, userId)
-		return fmt.Sprintf("user_%d", userId) // 备用方案
+		return fmt.Sprintf("user_%d", userId)
 	}
-	
+
 	var authResponse struct {
 		Username string `json:"username"`
 		Role     string `json:"role"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&authResponse); err != nil {
 		log.Printf("Error decoding auth response: %v", err)
-		return fmt.Sprintf("user_%d", userId) // 备用方案
+		return fmt.Sprintf("user_%d", userId)
 	}
-	
+
 	return authResponse.Username
 }

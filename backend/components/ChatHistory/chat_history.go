@@ -21,8 +21,6 @@ func main() {
 	services.InitChatHistoryDB()
 
 	router := gin.Default()
-
-	// 聊天记录相关路由
 	router.POST("/api/chat-history/save", saveChatMessage)
 	router.GET("/api/chat-history/user/:userId", getUserChatHistory)
 	router.GET("/api/chat-history/admin/users", getAllUsersChatSummary)
@@ -38,8 +36,6 @@ func main() {
 		log.Fatalf("Failed to start chat history microservice: %s", err)
 	}
 }
-
-// saveChatMessage 保存聊天消息
 func saveChatMessage(c *gin.Context) {
 	var req struct {
 		UserID         int    `json:"userId" binding:"required"`
@@ -68,8 +64,6 @@ func saveChatMessage(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Chat message saved successfully"})
 }
-
-// getUserChatHistory 获取用户聊天历史
 func getUserChatHistory(c *gin.Context) {
 	userIDStr := c.Param("userId")
 	userID, err := strconv.Atoi(userIDStr)
@@ -77,17 +71,15 @@ func getUserChatHistory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
-
-	// 从查询参数获取分页和搜索条件
 	keyword := c.Query("keyword")
 	startDate := c.Query("startDate")
 	endDate := c.Query("endDate")
-	
+
 	page, _ := strconv.Atoi(c.Query("page"))
 	if page <= 0 {
 		page = 1
 	}
-	
+
 	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
 	if pageSize <= 0 {
 		pageSize = 20
@@ -111,8 +103,6 @@ func getUserChatHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
-
-// getAllUsersChatSummary 获取所有用户聊天摘要（管理员功能）
 func getAllUsersChatSummary(c *gin.Context) {
 	summaries, err := services.GetAllUsersChatSummary()
 	if err != nil {
