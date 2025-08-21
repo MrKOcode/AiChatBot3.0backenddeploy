@@ -212,7 +212,7 @@ func ReadinessCheck(c *gin.Context, convoId int64, userMessage string, userId st
 			convoText += fmt.Sprintf("%s: %s\n", messages[i].Role, messages[i].Content)
 		}
 
-		moreMaterialPrompt := "This student is not ready. Provide additional educational material about inertia based on this conversation:\n" + convoText
+		moreMaterialPrompt := "This student is not ready. Provide additional educational materials for the user based on the chosen topic according to this conversation:\n" + convoText
 		additionalMaterial, _ := services.GetChatGPTResponse(moreMaterialPrompt)
 
 		saveMessageWithHistory(convoId, userId, "system", additionalMaterial)
@@ -230,7 +230,7 @@ func ReadinessCheck(c *gin.Context, convoId int64, userMessage string, userId st
 		}
 
 		questionPrompt := `
-You are a physics tutor. Based on the conversation about Newton's First Law and inertia, generate 5 self-assessment questions.
+You are a teacher. Based on the conversation, generate 5 self-assessment questions for the user.
 Format exactly like:
 -Self assessment-
 Question 1: ...
@@ -301,15 +301,11 @@ Answer 2 feedback: ...
 Answer 3 feedback: ...
 Answer 4 feedback: ...
 Answer 5 feedback: ...
-Conclusion: ...
-Here is the full conversation:
-`
-			fullPrompt := gradingPrompt + fullHistory
-			feedback, _ := services.GetChatGPTResponse(fullPrompt)
-
-			saveMessageWithHistory(convoId, userId, "system", feedback)
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
-			return true
+Conclusion: ...`
+			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
+        saveMessageWithHistory(convoId, userId, "system", feedback)
+        c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+        return true
 		}
 	}
 	return false
@@ -327,7 +323,7 @@ func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId 
 	//3.Send follow-up message about assessment readiness
 	followUp := "Advise me if you finish reading and ready to do a self-assessment to test your understanding of the knowledge."
 	saveMessageWithHistory(convoId, userId, "system", followUp)
-//4.Return the response to the user
+	//4.Return the response to the user
 	c.JSON(http.StatusOK, gin.H{"response": gin.H{
 		"content": resp,
 		"role":    "chatbot",
