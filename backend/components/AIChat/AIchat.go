@@ -216,7 +216,8 @@ func ReadinessCheck(c *gin.Context, convoId int64, userMessage string, userId st
 		additionalMaterial, _ := services.GetChatGPTResponse(moreMaterialPrompt)
 
 		saveMessageWithHistory(convoId, userId, "system", additionalMaterial)
-		saveMessageWithHistory(convoId, userId, "system", "Are you ready to do a self-assessment?")
+		saveMessageWithHistory(convoId, userId, "system", "Let me know if you need to study more or perform a self-assessment.")
+
 		c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": additionalMaterial, "role": "system"}})
 		return false
 	}
@@ -303,9 +304,9 @@ Answer 4 feedback: ...
 Answer 5 feedback: ...
 Conclusion: ...`
 			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
-        saveMessageWithHistory(convoId, userId, "system", feedback)
-        c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
-        return true
+			saveMessageWithHistory(convoId, userId, "system", feedback)
+			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+			return true
 		}
 	}
 	return false
@@ -321,7 +322,7 @@ func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId 
 	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
 
 	//3.Send follow-up message about assessment readiness
-	followUp := "Advise me if you finish reading and ready to do a self-assessment to test your understanding of the knowledge."
+	followUp := "Let me know if you need to study more or perform a self-assessment."
 	saveMessageWithHistory(convoId, userId, "system", followUp)
 	//4.Return the response to the user
 	c.JSON(http.StatusOK, gin.H{"response": gin.H{
