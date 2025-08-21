@@ -242,6 +242,7 @@ Question 5: ...
 `
 
 		assessment, _ := services.GetChatGPTResponse(questionPrompt + convoText)
+		saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_STARTED-")
 		saveMessageWithHistory(convoId, userId, "system", assessment)
 		saveMessageWithHistory(convoId, userId, "system", "Please answer these questions one by one.")
 		c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": assessment, "role": "system"}})
@@ -305,6 +306,7 @@ Answer 5 feedback: ...
 Conclusion: ...`
 			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
 			saveMessageWithHistory(convoId, userId, "system", feedback)
+			saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
 			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
 			return true
 		}
@@ -358,14 +360,7 @@ func sendMessage(c *gin.Context) {
 			isOnTopic = false
 		}
 	}()
-	// Before Goroutine
-	// isOnTopic, err := services.ClassifyMessageTopic(req.Message.Content)
-	// if err != nil || !isOnTopic {
-	// 	OffTopic(c, req.Message.ConversationID)
-	// 	return
-	// }
-
-	//Step 2, Save user message
+	
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -388,11 +383,21 @@ func sendMessage(c *gin.Context) {
 		return
 	}
 
-	//before Goroutine
-	// if err := services.SaveMessage(req.Message.ConversationID, "user", req.Message.Content); err != nil {
-	// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	// 	return
-	// }
+	// Prevent new questions if assessment already started
+msgs, _ := services.GetMessages(req.Message.ConversationID, 100, 0)
+for _, m := range msgs {
+    if m.Content == "-ASSESSMENT_STARTED-" {
+        if AssessmentAnswering(c, req.Message.ConversationID, req.Message.Content, req.UserID) {
+            return
+        }
+        return // skip readiness check once assessment has started
+    }
+    if m.Content == "-ASSESSMENT_COMPLETED-" {
+        // After grading, fallback to normal chatbot mode
+        FallbackResponse(c, req.Message.ConversationID, req.Message.Content, req.UserID)
+        return
+    }
+}
 
 	//Step 3: Check Readiness flow (yes/no)
 	if !ReadinessCheck(c, req.Message.ConversationID, req.Message.Content, req.UserID) {
@@ -404,40 +409,7 @@ func sendMessage(c *gin.Context) {
 		return
 	}
 
-	// If this is the 5th answer → proceed to grading (Step 4)
-	// **proved working**if answerCount == 5 {
-	// 	gradingPrompt := `You are a teaching chatbot. Provide feedback on each of the 5 answers submitted by the student. Format your feedback like this:
-
-	// Title: -Self assessment result-
-
-	// Question 1 feedback: ...
-	// Question 2 feedback: ...
-	// Question 3 feedback: ...
-	// Question 4 feedback: ...
-	// Question 5 feedback: ...
-
-	// Conclusion: Summarize the student's understanding and performance based on the full conversation. Provide a clear recommendation on whether the student has mastered the concept of inertia based on their answers and the prior conversation.
-
-	// Here is the full conversation and answers:\n\n`
-
-	// 	var convo string
-	// 	for i := len(messages) - 1; i >= 0; i-- {
-	// 		convo += fmt.Sprintf("%s: %s\n", messages[i].Role, messages[i].Content)
-	// 	}
-	// 	fullPrompt := gradingPrompt + "\n\n" + convo
-
-	// 	feedback, err := services.GetChatGPTResponse(fullPrompt)
-	// 	if err != nil {
-	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get feedback"})
-	// 		return
-	// 	}
-
-	// 	_ = services.SaveMessage(req.Message.ConversationID, "system", feedback)
-	// 	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "system"}})
-	// 	return
-	// }
-
-	//Step 5:Fallback normal charbot response
+	
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -448,22 +420,6 @@ func sendMessage(c *gin.Context) {
 
 }
 
-// **Call ChatGPT API**Deeleted for self-assessment implementation
-// resp, err := services.GetChatGPTResponse(req.Message.Content)
-// if err != nil {
-// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 	return
-// }
-
-// // Save chatbot reply
-// if err := services.SaveMessage(req.Message.ConversationID, "chatbot", resp); err != nil {
-// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-// 	return
-// }
-
-// c.JSON(http.StatusOK, gin.H{
-// 	"response": gin.H{"content": resp, "role": "chatbot"},
-// })
 
 func fetchConversationContent(c *gin.Context) {
 	convoID := c.Param("id")
