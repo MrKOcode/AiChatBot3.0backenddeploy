@@ -116,12 +116,17 @@ func GetAllMessagesByUser(userId string) ([]ChatMessage, error) {
 }
 
 func ClassifyMessageTopic(message string) (bool, error) {
-	prompt := fmt.Sprintf(
-		`Consider if this message relates to STEM education (Math, Physics, Chemistry, 
-        Computer Science, Engineering) OR is part of educational workflows (self-assessment, 
-        course navigation, learning materials). Respond ONLY 'yes' or 'no'. Message: "%s"`,
-		message,
-	)
+	prompt := fmt.Sprintf(`
+You are a strict classifier. 
+Classify if the following user message is directly related to studying or learning 
+in academic fields such as Math, Physics, Chemistry, Computer Science, or similar. 
+
+Respond with exactly one word: "yes" or "no". 
+Do not add any explanation or punctuation.
+
+Message: "%s"
+`, message)
+	
 
 	response, err := GetChatGPTResponse(prompt)
 	if err != nil {

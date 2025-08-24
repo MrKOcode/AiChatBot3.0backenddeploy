@@ -267,35 +267,45 @@ func AssessmentAnswering(c *gin.Context, convoId int64, userMessage string, user
 	}
 
 	if inAssessmentPhase {
-		for i := len(messages) - 1; i >= 0; i-- {
-			if messages[i].Role == "system" && strings.Contains(messages[i].Content, "Please answer these questions") {
-				break
-			}
-			if messages[i].Role == "user" {
-				answerCount++
-			}
-		}
+    // Always save current answer first
+    saveMessageWithHistory(convoId, userId, "user", userMessage)
 
-		if answerCount < 5 {
-			saveMessageWithHistory(convoId, userId, "user", userMessage)
-			left := 5 - answerCount - 1
-			followup := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
-			saveMessageWithHistory(convoId, userId, "system", followup)
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": followup, "role": "system"}})
-			return true
-		}
+    // Count all user answers after the assessment start marker
+    answerCount := 0
+    for i := len(messages) - 1; i >= 0; i-- {
+        if messages[i].Role == "system" && 
+           (strings.Contains(messages[i].Content, "-ASSESSMENT_STARTED-") || 
+            strings.Contains(messages[i].Content, "Please answer these questions")) {
+            break
+        }
+        if messages[i].Role == "user" {
+            answerCount++
+        }
+    }
 
-		if answerCount == 5 {
-			saveMessageWithHistory(convoId, userId, "user", userMessage)
+    if answerCount < 5 {
+        left := 5 - answerCount
+        if left > 0 {
+            followup := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
+            saveMessageWithHistory(convoId, userId, "system", followup)
+            c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": followup, "role": "system"}})
+            return true
+        }
+    }
 
-			// grading logic
-			allMessages, _ := services.GetAllMessagesByUser(userId)
-			var fullHistory string
-			for _, m := range allMessages {
-				fullHistory += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
-			}
+    if answerCount == 5 {
+        // Collect last 5 answers for grading
+        var userAnswers []string
+        for _, m := range messages {
+            if m.Role == "user" {
+                userAnswers = append(userAnswers, m.Content)
+                if len(userAnswers) == 5 {
+                    break
+                }
+            }
+        }
 
-			gradingPrompt := `
+        gradingPrompt := `
 You are a teaching assistant chatbot. Provide feedback on the student's 5 answers.
 Title: -Self assessment result-
 Answer 1 feedback: ...
@@ -304,15 +314,14 @@ Answer 3 feedback: ...
 Answer 4 feedback: ...
 Answer 5 feedback: ...
 Conclusion: ...`
-			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
-			saveMessageWithHistory(convoId, userId, "system", feedback)
-			saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
-			return true
-		}
-	}
-	return false
+        feedback, _ := services.GetChatGPTResponse(gradingPrompt + strings.Join(userAnswers, "\n"))
+        saveMessageWithHistory(convoId, userId, "system", feedback)
+        saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
+        c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+        return true
+    }
 }
+
 
 // 4. Fallback generic chatbot response
 func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId string) {
@@ -320,16 +329,22 @@ func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId 
 	resp, _ := services.GetChatGPTResponse(userMessage)
 
 	//2. Save the response as a chatbot reply
-	saveMessageWithHistory(convoId, userId, "", resp)
-	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
+	// saveMessageWithHistory(convoId, userId, "", resp)
+	// c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
+	// 2. Save chatbot reply
+    saveMessageWithHistory(convoId, userId, "chatbot", resp)
 
 	//3.Send follow-up message about assessment readiness
 	followUp := "Let me know if you need to study more or perform a self-assessment."
 	saveMessageWithHistory(convoId, userId, "system", followUp)
 	//4.Return the response to the user
-	c.JSON(http.StatusOK, gin.H{"response": gin.H{
-		"content": resp,
-		"role":    "chatbot",
+	// c.JSON(http.StatusOK, gin.H{"response": gin.H{
+	// 	"content": resp,
+	// 	"role":    "chatbot",
+	// 4. Return both messages in one JSON response
+    c.JSON(http.StatusOK, gin.H{"response": []gin.H{
+        {"content": resp, "role": "chatbot"},
+        {"content": followUp, "role": "system"},
 	}})
 }
 
