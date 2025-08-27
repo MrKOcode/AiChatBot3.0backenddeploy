@@ -1,15 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+
 Globals:
   Function:
     Timeout: 10
     Runtime: provided.al2
-   
     MemorySize: 128
+
 Resources:
-  # =========================
-  # Cognito (replaces Auth svc)
-  # =========================
+  # ============ Cognito ============
   UserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -42,8 +41,7 @@ Resources:
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      # must be globally unique; adjust if deploy complains
-      Domain: !Sub "mychatbot-3-0-${AWS::AccountId}"
+      Domain: !Sub "mychatbot-3-0-${AWS::AccountId}"   # must be globally unique; change if needed
       UserPoolId: !Ref UserPool
 
   AdminsGroup:
@@ -51,18 +49,16 @@ Resources:
     Properties:
       GroupName: admins
       UserPoolId: !Ref UserPool
-      Description: "Admins can view all conversations"
+      Description: Admins can view all conversations
 
   StudentsGroup:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
       GroupName: students
       UserPoolId: !Ref UserPool
-      Description: "Students can view only their own"
+      Description: Students can view only their own
 
-  # =========================
-  # API Gateway (explicit API with Cognito authorizer)
-  # =========================
+  # ============ API (REST) with Cognito authorizer ============
   RestApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -76,21 +72,8 @@ Resources:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt UserPool.Arn
         DefaultAuthorizer: CognitoAuthorizer
-  AIChatFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: AIChatHandler
-      Handler: bootstrap
-      CodeUri: ./components/AIChat
-      Events:
-        ChatRoute:
-          Type: Api
-          Properties:
-            Path: /api/AIchat/{proxy+}
-            Method: ANY
-      Environment:
-        Variables:
-          DYNAMODB_TABLE: ChatMessagesTable
+
+  # ============ DynamoDB ============
   ChatTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -106,8 +89,31 @@ Resources:
         - AttributeName: createdAt
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
-  
-  Outputs:
+
+  # ============ Lambda ============
+  AIChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: AIChatHandler
+      Handler: bootstrap
+      CodeUri: ./components/AIChat
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatTable
+      Environment:
+        Variables:
+          DDB_MSG_TABLE: !Ref ChatTable
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_USER_POOL_CLIENT_ID: !Ref UserPoolClient
+      Events:
+        ChatProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /api/AIchat/{proxy+}
+            Method: ANY
+
+Outputs:
   ApiEndpoint:
     Description: HTTPS endpoint of the API
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
