@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -252,50 +253,231 @@ Question 5: ...
 	return true // Not a readiness phase
 }
 
+// func AssessmentAnswering(c *gin.Context, convoId int64, userMessage string, userId string) bool {
+// 	messages, _ := services.GetMessages(convoId, 50, 0)
+
+// 	inAssessmentPhase := false
+// 	answerCount := 0
+
+// 	for i := len(messages) - 1; i >= 0; i-- {
+// 		msg := messages[i]
+// 		if msg.Role == "system" && strings.Contains(msg.Content, "Please answer these questions") {
+// 			inAssessmentPhase = true
+// 			break
+// 		}
+// 	}
+
+// 	if inAssessmentPhase {
+// 		for i := len(messages) - 1; i >= 0; i-- {
+// 			if messages[i].Role == "system" && strings.Contains(messages[i].Content, "Please answer these questions") {
+// 				break
+// 			}
+// 			if messages[i].Role == "user" {
+// 				answerCount++
+// 			}
+// 		}
+
+// 		if answerCount < 5 {
+// 			saveMessageWithHistory(convoId, userId, "user", userMessage)
+// 			left := 5 - answerCount - 1
+// 			followup := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
+// 			saveMessageWithHistory(convoId, userId, "system", followup)
+// 			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": followup, "role": "system"}})
+// 			return true
+// 		}
+
+// 		if answerCount == 5 {
+// 			saveMessageWithHistory(convoId, userId, "user", userMessage)
+
+// 			// grading logic
+// 			allMessages, _ := services.GetAllMessagesByUser(userId)
+// 			var fullHistory string
+// 			for _, m := range allMessages {
+// 				fullHistory += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
+// 			}
+
+// 			gradingPrompt := `
+// You are a teaching assistant chatbot. Provide feedback on the student's 5 answers.
+// Title: -Self assessment result-
+// Answer 1 feedback: ...
+// Answer 2 feedback: ...
+// Answer 3 feedback: ...
+// Answer 4 feedback: ...
+// Answer 5 feedback: ...
+// Conclusion: ...`
+// 			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
+// 			saveMessageWithHistory(convoId, userId, "system", feedback)
+// 			saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
+// 			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
+
+// func AssessmentAnswering(c *gin.Context, convoId int64, userMessage string, userId string) bool {
+//     // Pull recent messages
+//     messages, _ := services.GetMessages(convoId, 500, 0)
+
+//     // Find the instruction marker that starts the answer window
+//     startIdx := -1
+//     for i := len(messages) - 1; i >= 0; i-- {
+//         if messages[i].Role == "system" && strings.Contains(messages[i].Content, "Please answer these questions") {
+//             startIdx = i
+//             break
+//         }
+//     }
+//     if startIdx == -1 {
+//         // not in assessment phase
+//         return false
+//     }
+
+//     // 1) Save THIS answer first so it is included in the count
+//     saveMessageWithHistory(convoId, userId, "user", userMessage)
+
+//     // 2) Re-read messages so we include the just-saved answer
+//     messages, _ = services.GetMessages(convoId, 500, 0)
+
+//     // 3) Count user answers AFTER the instruction marker
+//     answerCount := 0
+//     for i := len(messages) - 1; i > startIdx; i-- {
+//         if messages[i].Role == "user" {
+//             answerCount++
+//         }
+//     }
+
+//     // 4) If fewer than 5, tell how many are left (but never say "0")
+//     if answerCount < 5 {
+//         left := 5 - answerCount
+//         if left > 0 {
+//             followup := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
+//             saveMessageWithHistory(convoId, userId, "system", followup)
+//             c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": followup, "role": "system"}})
+//             return true
+//         }
+//     }
+
+//     // 5) When we have 5 answers, gather exactly those 5 and grade
+//     if answerCount >= 5 {
+//         var userAnswers []string
+//         for i := len(messages) - 1; i > startIdx; i-- {
+//             if messages[i].Role == "user" {
+//                 userAnswers = append(userAnswers, messages[i].Content)
+//                 if len(userAnswers) == 5 {
+//                     break
+//                 }
+//             }
+//         }
+//         // Reverse to original order: Answer 1..5
+//         for i, j := 0, len(userAnswers)-1; i < j; i, j = i+1, j-1 {
+//             userAnswers[i], userAnswers[j] = userAnswers[j], userAnswers[i]
+//         }
+
+//         gradingPrompt := `
+// You are a teaching assistant chatbot. Provide feedback on the student's 5 answers.
+// Title: -Self assessment result-
+// Answer 1 feedback: ...
+// Answer 2 feedback: ...
+// Answer 3 feedback: ...
+// Answer 4 feedback: ...
+// Answer 5 feedback: ...
+// Conclusion: ...`
+
+//         feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + strings.Join(userAnswers, "\n"))
+//         saveMessageWithHistory(convoId, userId, "system", feedback)
+//         saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
+//         c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+//         return true
+//     }
+
+//     return false
+// }
 func AssessmentAnswering(c *gin.Context, convoId int64, userMessage string, userId string) bool {
-	messages, _ := services.GetMessages(convoId, 50, 0)
+	// Read recent messages
+	msgs, _ := services.GetMessages(convoId, 500, 0)
+	if len(msgs) == 0 {
+		return false
+	}
 
-	inAssessmentPhase := false
-	answerCount := 0
+	// Normalize to chronological order (oldest -> newest)
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
 
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if msg.Role == "system" && strings.Contains(msg.Content, "Please answer these questions") {
-			inAssessmentPhase = true
+	// Find the latest "Please answer..." marker and the assessment block text
+	startIdx := -1
+	assessmentText := ""
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "system" && strings.Contains(msgs[i].Content, "-Self assessment-") && assessmentText == "" {
+			assessmentText = msgs[i].Content
+		}
+		if msgs[i].Role == "system" && strings.Contains(msgs[i].Content, "Please answer these questions") {
+			startIdx = i
 			break
 		}
 	}
+	if startIdx == -1 {
+		// Not in assessment phase
+		return false
+	}
 
-	if inAssessmentPhase {
-		for i := len(messages) - 1; i >= 0; i-- {
-			if messages[i].Role == "system" && strings.Contains(messages[i].Content, "Please answer these questions") {
-				break
+	// Collect all user answers AFTER the marker
+	answersAfterMarker := []string{}
+	for i := startIdx + 1; i < len(msgs); i++ {
+		if msgs[i].Role == "user" {
+			answersAfterMarker = append(answersAfterMarker, msgs[i].Content)
+		}
+	}
+
+	// --- Try verifier first (maps multi-line replies to Q1..Q5) ---
+	var ordered []string
+	if assessmentText != "" {
+		userAnswersText := strings.Join(answersAfterMarker, "\n")
+		if result, err := verifyAnswersWithOpenAI(assessmentText, userAnswersText); err == nil && result != nil {
+			// If fewer than 5, tell how many are left (never say 0)
+			if result.Count < 5 {
+				left := 5 - result.Count
+				if left > 0 {
+					follow := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
+					saveMessageWithHistory(convoId, userId, "system", follow)
+					c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": follow, "role": "system"}})
+					return true
+				}
 			}
-			if messages[i].Role == "user" {
-				answerCount++
+			// Have all 5 -> build ordered list
+			if len(result.Answers) == 5 {
+				sort.Slice(result.Answers, func(i, j int) bool { return result.Answers[i].Q < result.Answers[j].Q })
+				for _, a := range result.Answers {
+					ordered = append(ordered, fmt.Sprintf("Answer %d: %s", a.Q, strings.TrimSpace(a.Text)))
+				}
 			}
 		}
+	}
 
-		if answerCount < 5 {
-			saveMessageWithHistory(convoId, userId, "user", userMessage)
-			left := 5 - answerCount - 1
-			followup := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
-			saveMessageWithHistory(convoId, userId, "system", followup)
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": followup, "role": "system"}})
-			return true
-		}
-
-		if answerCount == 5 {
-			saveMessageWithHistory(convoId, userId, "user", userMessage)
-
-			// grading logic
-			allMessages, _ := services.GetAllMessagesByUser(userId)
-			var fullHistory string
-			for _, m := range allMessages {
-				fullHistory += fmt.Sprintf("%s: %s\n", m.Role, m.Content)
+	// --- Fallback if verifier failed or didn't return 5 answers ---
+	if len(ordered) == 0 {
+		count := len(answersAfterMarker)
+		if count < 5 {
+			left := 5 - count
+			if left > 0 {
+				follow := fmt.Sprintf("Got your answer. Please answer the remaining %d question(s).", left)
+				saveMessageWithHistory(convoId, userId, "system", follow)
+				c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": follow, "role": "system"}})
+				return true
 			}
+		}
+		// Build exactly the last 5 answers in Q1..Q5 order
+		last5 := answersAfterMarker
+		if len(last5) > 5 {
+			last5 = last5[len(last5)-5:]
+		}
+		for i, t := range last5 {
+			ordered = append(ordered, fmt.Sprintf("Answer %d: %s", i+1, t))
+		}
+	}
 
-			gradingPrompt := `
+	// Grade
+	gradingPrompt := `
 You are a teaching assistant chatbot. Provide feedback on the student's 5 answers.
 Title: -Self assessment result-
 Answer 1 feedback: ...
@@ -304,15 +486,14 @@ Answer 3 feedback: ...
 Answer 4 feedback: ...
 Answer 5 feedback: ...
 Conclusion: ...`
-			feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + fullHistory)
-			saveMessageWithHistory(convoId, userId, "system", feedback)
-			saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
-			c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
-			return true
-		}
-	}
-	return false
+
+	feedback, _ := services.GetChatGPTResponse(gradingPrompt + "\n" + strings.Join(ordered, "\n"))
+	saveMessageWithHistory(convoId, userId, "system", feedback)
+	saveMessageWithHistory(convoId, userId, "system", "-ASSESSMENT_COMPLETED-")
+	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": feedback, "role": "chatbot"}})
+	return true
 }
+
 
 // 4. Fallback generic chatbot response
 func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId string) {
@@ -321,13 +502,14 @@ func FallbackResponse(c *gin.Context, convoId int64, userMessage string, userId 
 
 	//2. Save the response as a chatbot reply
 	saveMessageWithHistory(convoId, userId, "", resp)
-	c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
+	// c.JSON(http.StatusOK, gin.H{"response": gin.H{"content": resp, "role": "system"}})
 
 	//3.Send follow-up message about assessment readiness
 	followUp := "Let me know if you need to study more or perform a self-assessment."
 	saveMessageWithHistory(convoId, userId, "system", followUp)
 	//4.Return the response to the user
-	c.JSON(http.StatusOK, gin.H{"response": gin.H{
+	c.JSON(http.StatusOK, gin.H{
+		"response": gin.H{
 		"content": resp,
 		"role":    "chatbot",
 	}})
@@ -526,4 +708,68 @@ func getUsernameFromAuth(userId int) string {
 	}
 
 	return authResponse.Username
+}
+
+
+// --- Verifier types
+type verifyAns struct {
+	Count   int `json:"count"`
+	Answers []struct {
+		Q     int    `json:"q"`
+		Text  string `json:"text"`
+	} `json:"answers"`
+}
+
+// --- Use OpenAI to verify how many questions (1..5) have answers, returning normalized answers.
+func verifyAnswersWithOpenAI(assessmentText, userAnswersText string) (*verifyAns, error) {
+	prompt := `
+You are a strict grader. The assessment has exactly 5 questions (Q1..Q5) shown below.
+The student responses (possibly multiple in one message) are also provided.
+Extract answers for each question Q1..Q5 ONLY from the student's responses.
+
+Return JSON ONLY in this exact schema (no extra commentary):
+
+{
+  "count": <number from 0 to 5>,
+  "answers": [
+    {"q": 1, "text": "<answer for Q1 or empty string if missing>"},
+    {"q": 2, "text": "<answer for Q2 or empty string if missing>"},
+    {"q": 3, "text": "<answer for Q3 or empty string if missing>"},
+    {"q": 4, "text": "<answer for Q4 or empty string if missing>"},
+    {"q": 5, "text": "<answer for Q5 or empty string if missing>"}
+  ]
+}
+
+Rules:
+- "count" is how many of Q1..Q5 have a NON-empty "text".
+- Do not invent content. If an answer cannot be found, leave "text" empty.
+- Output valid JSON only.
+
+ASSESSMENT:
+` + assessmentText + `
+
+STUDENT RESPONSES:
+` + userAnswersText
+
+	raw, err := services.GetChatGPTResponse(prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Some models wrap JSON in code fences; strip fences if present.
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "```") {
+		if i := strings.Index(raw, "{"); i >= 0 {
+			raw = raw[i:]
+		}
+		if j := strings.LastIndex(raw, "}"); j >= 0 && j+1 <= len(raw) {
+			raw = raw[:j+1]
+		}
+	}
+
+	var out verifyAns
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("verifier JSON parse error: %v; raw: %s", err, raw)
+	}
+	return &out, nil
 }

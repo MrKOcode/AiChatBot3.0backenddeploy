@@ -7,6 +7,75 @@ Globals:
    
     MemorySize: 128
 Resources:
+  # =========================
+  # Cognito (replaces Auth svc)
+  # =========================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: mychatbot-user-pool
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: mychatbot-web
+      GenerateSecret: false
+      AllowedOAuthFlows: [code]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs:
+        - http://localhost:5173/
+      LogoutURLs:
+        - http://localhost:5173/
+      SupportedIdentityProviders: [COGNITO]
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      # must be globally unique; adjust if deploy complains
+      Domain: !Sub "mychatbot-3-0-${AWS::AccountId}"
+      UserPoolId: !Ref UserPool
+
+  AdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admins
+      UserPoolId: !Ref UserPool
+      Description: "Admins can view all conversations"
+
+  StudentsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: students
+      UserPoolId: !Ref UserPool
+      Description: "Students can view only their own"
+
+  # =========================
+  # API Gateway (explicit API with Cognito authorizer)
+  # =========================
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+        DefaultAuthorizer: CognitoAuthorizer
   AIChatFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -37,3 +106,24 @@ Resources:
         - AttributeName: createdAt
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+  
+  Outputs:
+  ApiEndpoint:
+    Description: HTTPS endpoint of the API
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Description: Cognito App Client ID
+    Value: !Ref UserPoolClient
+
+  HostedUiBaseUrl:
+    Description: Cognito Hosted UI base url
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+
+  DynamoTableName:
+    Description: DynamoDB table name for chat messages
+    Value: !Ref ChatTable
