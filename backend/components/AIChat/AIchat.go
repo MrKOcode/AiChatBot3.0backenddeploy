@@ -11,8 +11,9 @@ import (
 	"sync"
 	"sort"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 
 	"AiChatBotBackend/components/AIChat/services"
@@ -27,7 +28,7 @@ func main() {
 
 	services.InitDB()
 
-	router := gin.Default()
+	lambda.Start(handler)
 
 	// Register AI Chat routes
 	//router.POST("/api/AIchat/conversations/:conversationId/messages", processChat)
@@ -600,6 +601,29 @@ for _, m := range msgs {
 
 	wg.Wait()
 
+}
+// --- AWS Lambda handler ---
+func Handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch request.HTTPMethod {
+	case "POST":
+		if request.Path == "/api/AIchat/conversations" {
+			return lambdaCreateConversation(request)
+		}
+		if strings.HasPrefix(request.Path, "/api/AIchat/conversations/") &&
+			strings.HasSuffix(request.Path, "/messages") {
+			return lambdaSendMessage(request)
+		}
+	case "GET":
+		if request.Path == "/api/AIchat/history/" {
+			return lambdaFetchChatHistory()
+		}
+		// Add more GET routes if needed
+	}
+	return events.APIGatewayProxyResponse{
+		StatusCode: 404,
+		Body:       `{"error": "Route not found"}`,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+	}, nil
 }
 
 
