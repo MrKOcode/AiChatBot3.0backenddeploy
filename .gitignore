@@ -56,3 +56,4 @@ backend/components/AIChat/.env
 backend/components/ChatHistory
 
 
+backend/*.tar.gz

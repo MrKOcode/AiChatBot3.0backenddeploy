@@ -1,27 +1,79 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+
 Globals:
   Function:
     Timeout: 10
     Runtime: provided.al2
-   
     MemorySize: 128
+
 Resources:
-  AIChatFunction:
-    Type: AWS::Serverless::Function
+  # ============ Cognito ============
+  UserPool:
+    Type: AWS::Cognito::UserPool
     Properties:
-      FunctionName: AIChatHandler
-      Handler: bootstrap
-      CodeUri: ./components/AIChat
-      Events:
-        ChatRoute:
-          Type: Api
-          Properties:
-            Path: /api/AIchat/{proxy+}
-            Method: ANY
-      Environment:
-        Variables:
-          DYNAMODB_TABLE: ChatMessagesTable
+      UserPoolName: mychatbot-user-pool
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: mychatbot-web
+      GenerateSecret: false
+      AllowedOAuthFlows: [code]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs:
+        - http://localhost:5173/
+      LogoutURLs:
+        - http://localhost:5173/
+      SupportedIdentityProviders: [COGNITO]
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "mychatbot-3-0-${AWS::AccountId}"   # must be globally unique; change if needed
+      UserPoolId: !Ref UserPool
+
+  AdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admins
+      UserPoolId: !Ref UserPool
+      Description: Admins can view all conversations
+
+  StudentsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: students
+      UserPoolId: !Ref UserPool
+      Description: Students can view only their own
+
+  # ============ API (REST) with Cognito authorizer ============
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+        DefaultAuthorizer: CognitoAuthorizer
+
+  # ============ DynamoDB ============
   ChatTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -37,3 +89,52 @@ Resources:
         - AttributeName: createdAt
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+
+  # ============ Lambda ============
+  AIChatFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: AIChatHandler
+      Handler: main
+      CodeUri: ./components/AIChat
+      Runtime: go1.x
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatTable
+      Environment:
+        Variables:
+          DDB_MSG_TABLE: !Ref ChatTable
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          # Useful for JWT verification in code (if you do it in Lambda)
+          COGNITO_ISSUER: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+          COGNITO_AUDIENCE: !Ref UserPoolClient
+      Events:
+        ChatProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /api/AIchat/{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTPS endpoint of the API
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Description: Cognito App Client ID
+    Value: !Ref UserPoolClient
+
+  HostedUiBaseUrl:
+    Description: Cognito Hosted UI base url
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"
+
+  DynamoTableName:
+    Description: DynamoDB table name for chat messages
+    Value: !Ref ChatTable
