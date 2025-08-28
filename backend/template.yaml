@@ -95,8 +95,10 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: AIChatHandler
-      Handler: bootstrap
+      Handler: main
       CodeUri: ./components/AIChat
+      Runtime: go1.x
+      Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ChatTable
@@ -105,6 +107,9 @@ Resources:
           DDB_MSG_TABLE: !Ref ChatTable
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          # Useful for JWT verification in code (if you do it in Lambda)
+          COGNITO_ISSUER: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+          COGNITO_AUDIENCE: !Ref UserPoolClient
       Events:
         ChatProxy:
           Type: Api
