@@ -6,36 +6,39 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
+"github.com/aws/aws-lambda-go/events"
+"github.com/aws/aws-lambda-go/lambda"
+"github.com/joho/godotenv"
 
 	"AiChatBotBackend/components/ChatHistory/services"
 )
 
 func main() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Println("Error loading .env file:", err)
-	}
-
-	services.InitChatHistoryDB()
-
-	router := gin.Default()
-	router.POST("/api/chat-history/save", saveChatMessage)
-	router.GET("/api/chat-history/user/:userId", getUserChatHistory)
-	router.GET("/api/chat-history/admin/users", getAllUsersChatSummary)
-
-	port := os.Getenv("CHAT_HISTORY_PORT")
-	if port == "" {
-		log.Println("CHAT_HISTORY_PORT is not set, using default port 5004")
-		port = "5004"
-	}
-
-	log.Printf("Chat History Service is running on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start chat history microservice: %s", err)
-	}
+_ = godotenv.Load(".env")
+services.InitChatHistoryDB()
+lambda.Start(handler)
 }
+
+
+func handler(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+		case "POST":
+			if req.Path == "/api/chat/history/save" {
+				return lambdaSaveChatMessage(req)
+			}
+		case "GET":
+			if len(req.PathParameters["userId"]) > 0 {
+				return lambdaGetUserChatHistory(req)
+			}
+			if req.Path == "/api/chat-history/admin/users" {
+				return lambdaGetAllUsersChatSummary(req)
+			}
+
+	}
+	return errorResponse(404, "Route not found"), nil
+}
+
+
 func saveChatMessage(c *gin.Context) {
 	var req struct {
 		UserID         int    `json:"userId" binding:"required"`

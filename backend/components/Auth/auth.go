@@ -1,16 +1,116 @@
+// ✅ auth.go - Lambda-Compatible Version (Phase 1)
+
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 
-	"github.com/gin-gonic/gin"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/joho/godotenv"
 
 	"AiChatBotBackend/components/Auth/services"
 )
+
+func main() {
+	_ = godotenv.Load(".env")
+	services.InitDB()
+	lambda.Start(handler)
+}
+
+func handler(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	switch req.HTTPMethod {
+	case "POST":
+		if req.Path == "/api/auth/register" {
+			return lambdaRegisterUser(req)
+		}
+		if req.Path == "/api/auth/login" {
+			return lambdaLoginUser(req)
+		}
+	case "GET":
+		if strings.HasPrefix(req.Path, "/api/auth/user/") {
+			return lambdaGetUserInfo(req)
+		}
+	}
+	return errorResponse(404, "Route not found"), nil
+}
+
+func lambdaRegisterUser(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	_ = json.Unmarshal([]byte(req.Body), &body)
+
+	if len(body.Username) < 3 || len(body.Password) < 6 {
+		return errorResponse(400, "Username or password too short"), nil
+	}
+
+	exists, err := services.UserExists(body.Username)
+	if err != nil {
+		return errorResponse(500, "Database error"), nil
+	}
+	if exists {
+		return errorResponse(409, "Username already taken"), nil
+	}
+
+	userID, err := services.CreateUser(body.Username, body.Password)
+	if err != nil {
+		return errorResponse(500, "Create user failed"), nil
+	}
+
+	role := determineRole(body.Username)
+	return jsonResponse(201, map[string]interface{}{
+		"message":  "User registered successfully",
+		"userId":   userID,
+		"role":     role,
+		"username": body.Username,
+	}), nil
+}
+
+func lambdaLoginUser(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	_ = json.Unmarshal([]byte(req.Body), &body)
+
+	user, err := services.ValidateUser(body.Username, body.Password)
+	if err != nil {
+		if err.Error() == "user not found" || err.Error() == "invalid password" {
+			return errorResponse(401, "Username or password is incorrect"), nil
+		}
+		return errorResponse(500, "Database error"), nil
+	}
+
+	return jsonResponse(200, map[string]interface{}{
+		"message":  "Login successful",
+		"userId":   user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+	}), nil
+}
+
+func lambdaGetUserInfo(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	id := strings.TrimPrefix(req.Path, "/api/auth/user/")
+	user, err := services.GetUserByID(id)
+	if err != nil {
+		if err.Error() == "user not found" {
+			return errorResponse(404, "User not found"), nil
+		}
+		return errorResponse(500, "Database error"), nil
+	}
+
+	return jsonResponse(200, map[string]interface{}{
+		"userId":   user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+	}), nil
+}
 
 func determineRole(username string) string {
 	if strings.HasPrefix(strings.ToLower(username), "admin") {
@@ -19,132 +119,15 @@ func determineRole(username string) string {
 	return "student"
 }
 
-func main() {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Println("Error loading .env file:", err)
-	}
-
-	services.InitDB()
-
-	router := gin.Default()
-	// router.Use(corsMiddleware()) // 移除CORS，由API Gateway处理
-
-	router.POST("/api/auth/register", registerUser)
-	router.POST("/api/auth/login", loginUser)
-	router.GET("/api/auth/user/:id", getUserInfo)
-
-	port := os.Getenv("AUTH_PORT")
-	if port == "" {
-		log.Println("AUTH_PORT is not set, using default port 5002")
-		port = "5002"
-	}
-
-	log.Printf("Auth Service is running on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start auth microservice: %s", err)
+func jsonResponse(status int, data interface{}) events.APIGatewayProxyResponse {
+	body, _ := json.Marshal(data)
+	return events.APIGatewayProxyResponse{
+		StatusCode: status,
+		Body:       string(body),
+		Headers:    map[string]string{"Content-Type": "application/json"},
 	}
 }
 
-func registerUser(c *gin.Context) {
-	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unvalid request format"})
-		return
-	}
-
-	if len(req.Username) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be at least 3 characters long"})
-		return
-	}
-
-	if len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters long"})
-		return
-	}
-
-	exists, err := services.UserExists(req.Username)
-	if err != nil {
-		log.Printf("Error checking user existence: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-		return
-	}
-
-	if exists {
-		c.JSON(http.StatusConflict, gin.H{"error": "Username already taken"})
-		return
-	}
-
-	userID, err := services.CreateUser(req.Username, req.Password)
-	if err != nil {
-		log.Printf("Error creating user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Create user failed"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message":  "User registered successfully",
-		"userId":   userID,
-		"role":     determineRole(req.Username),
-		"username": req.Username,
-	})
-}
-
-func loginUser(c *gin.Context) {
-	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unvalid request format"})
-		return
-	}
-
-	user, err := services.ValidateUser(req.Username, req.Password)
-	if err != nil {
-		if err.Error() == "user not found" || err.Error() == "invalid password" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Username or password is incorrect"})
-			return
-		}
-		log.Printf("Error validating user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "Login successful",
-		"userId":   user.ID,
-		"username": user.Username,
-		"role":     user.Role,
-	})
-}
-
-func getUserInfo(c *gin.Context) {
-	userID := c.Param("id")
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
-		return
-	}
-
-	user, err := services.GetUserByID(userID)
-	if err != nil {
-		if err.Error() == "user not found" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-			return
-		}
-		log.Printf("Error getting user info: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"userId":   user.ID,
-		"username": user.Username,
-		"role":     user.Role,
-	})
+func errorResponse(status int, msg string) events.APIGatewayProxyResponse {
+	return jsonResponse(status, map[string]string{"error": msg})
 }
