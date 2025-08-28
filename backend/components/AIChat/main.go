@@ -3,11 +3,9 @@
 package main
 
 import (
-	"context"
+	
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"strconv"
 	"strings"
 
@@ -15,7 +13,9 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/joho/godotenv"
 
-	"AiChatBotBackend/components/AIChat/services"
+	"github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/AIChat/services"
+
+
 )
 
 func main() {

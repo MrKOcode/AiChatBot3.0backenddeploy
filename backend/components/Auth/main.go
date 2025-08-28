@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/joho/godotenv"
 
-	"AiChatBotBackend/components/Auth/services"
+	"github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/Auth/services"
 )
 
 func main() {
