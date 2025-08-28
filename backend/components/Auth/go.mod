@@ -1,6 +1,6 @@
-module github.com/mrkocode/aichat-auth
+module github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/Auth
 
-go 1.25.0
+go 1.23.0
 
 require (
 	github.com/aws/aws-lambda-go v1.49.0

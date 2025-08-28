@@ -4,9 +4,6 @@ package main
 
 import (
 	"encoding/json"
-	"log"
-	"net/http"
-	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
