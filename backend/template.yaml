@@ -4,7 +4,7 @@ Transform: AWS::Serverless-2016-10-31
 Globals:
   Function:
     Timeout: 10
-    Runtime: go1.x
+    Runtime: provided.al2
     MemorySize: 128
 
 Resources:
@@ -81,7 +81,7 @@ Resources:
   ChatTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: ChatMessagesTable
+      TableName: ChatMessagesTableV3
       AttributeDefinitions:
         - AttributeName: conversationId
           AttributeType: S
@@ -102,7 +102,7 @@ Resources:
       FunctionName: AIChatHandler
       Handler: main
       CodeUri: ./components/AIChat
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -128,7 +128,7 @@ Resources:
       FunctionName: AuthHandler
       Handler: main
       CodeUri: ./components/Auth
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 15
       Environment:
         Variables:
@@ -147,7 +147,7 @@ Resources:
       FunctionName: ChatHistoryHandler
       Handler: main
       CodeUri: ./components/ChatHistory
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 20
       Environment:
         Variables:

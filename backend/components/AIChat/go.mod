@@ -1,4 +1,4 @@
-module AiChatBotBackend/components/AIChat
+module github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/AIChat
 
 go 1.25.0
 

@@ -1,9 +1,9 @@
 version = 0.1
+
 [default.deploy.parameters]
-stack_name = "chatbot-backend"
+stack_name = "MyChatbot3backend"
 resolve_s3 = true
-s3_prefix = "chatbot-backend"
+s3_prefix = "MyChatbot3backend"
 region = "us-west-2"
-confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
