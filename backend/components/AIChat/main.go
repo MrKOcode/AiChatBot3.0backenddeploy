@@ -20,7 +20,9 @@ import (
 
 func main() {
 	_ = godotenv.Load(".env")
-	services.InitDB() // Phase 2 will swap to DynamoDB
+	if err := services.InitDAL(); err != nil {
+	return errorResponse(500, "DAL init failed: "+err.Error()), nil
+}
 	lambda.Start(handler)
 }
 
