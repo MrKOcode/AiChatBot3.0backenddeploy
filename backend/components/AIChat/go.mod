@@ -1,6 +1,6 @@
 module github.com/MrKOcode/AiChatBot3.0backend/backend/components/AIChat
 
-go 1.25.1
+go 1.24.3
 
 require (
 	github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/AIChat v0.0.0-20250908185634-f8ad27543ec1
