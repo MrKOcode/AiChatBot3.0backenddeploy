@@ -5,13 +5,7 @@ import (
 	"time"
 )
 
-type Conversation struct {
-	ID        string `json:"id"`
-	UserID    string `json:"userId"`
-	Title     string `json:"title"`
-	CreatedAt time.Time `json:"createdAt"`
 
-}
 
 type Conversation struct {
 	ID		string    `json:"id"`

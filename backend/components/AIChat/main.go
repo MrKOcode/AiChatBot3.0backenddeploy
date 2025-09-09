@@ -1,28 +1,26 @@
-// ✅ AIchat.go - Lambda-Ready Version (Phase 1)
+// ✅ main.go — Fully DynamoDB-Integrated (AIChat Lambda)
 
 package main
 
 import (
-	
+	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/joho/godotenv"
 
 	"github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/AIChat/services"
-
-
 )
 
 func main() {
 	_ = godotenv.Load(".env")
 	if err := services.InitDAL(); err != nil {
-	return errorResponse(500, "DAL init failed: "+err.Error()), nil
-}
+		panic("DAL init failed: " + err.Error())
+	}
 	lambda.Start(handler)
 }
 
@@ -58,29 +56,41 @@ func lambdaCreateConversation(req events.APIGatewayProxyRequest) (events.APIGate
 	}
 	_ = json.Unmarshal([]byte(req.Body), &body)
 
-	id, err := services.CreateConversation(body.UserID)
+	id, err := services.Store.CreateConversation(context.Background(), body.UserID, "New Academic Chat")
 	if err != nil {
 		return errorResponse(500, err.Error()), nil
 	}
+
 	greeting := "This is your personal AiChatBot, what can I help you study today?"
-	saveMessageWithHistory(id, body.UserID, "chatbot", greeting)
+	err = services.Store.PutMessage(context.Background(), services.ChatMessage{
+		ID:             generateULID(),
+		ConversationID: id,
+		UserID:         body.UserID,
+		Role:           "chatbot",
+		Content:        greeting,
+		CreatedAt:      time.Now().UTC(),
+	})
+	if err != nil {
+		return errorResponse(500, "Failed to save greeting message"), nil
+	}
 
 	return jsonResponse(200, map[string]interface{}{
 		"conversationId": id,
-		"conversation": map[string]string{"title": "New Academic Chat"},
+		"conversation":   map[string]string{"title": "New Academic Chat"},
 	}), nil
 }
 
 func lambdaFetchConversations(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	userId := req.QueryStringParameters["userId"]
 	if userId == "" {
-		userId = "1" // default fallback
+		return errorResponse(400, "Missing userId"), nil
 	}
-	convos, err := services.GetConversations(userId)
+
+	page, err := services.Store.ListConversations(context.Background(), userId, 20, "")
 	if err != nil {
 		return errorResponse(500, err.Error()), nil
 	}
-	return jsonResponse(200, map[string]interface{}{"content": map[string]interface{}{"data": convos}}), nil
+	return jsonResponse(200, map[string]interface{}{ "content": map[string]interface{}{ "data": page.Items }}), nil
 }
 
 func lambdaSendMessage(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -90,49 +100,71 @@ func lambdaSendMessage(req events.APIGatewayProxyRequest) (events.APIGatewayProx
 	}
 	_ = json.Unmarshal([]byte(req.Body), &body)
 
-	err := services.SaveMessage(body.Message.ConversationID, "user", body.Message.Content)
-	if err != nil {
-		return errorResponse(500, "Failed to save message"), nil
+	now := time.Now().UTC()
+	userMsg := services.ChatMessage{
+		ID:             generateULID(),
+		ConversationID: body.Message.ConversationID,
+		UserID:         body.UserID,
+		Role:           "user",
+		Content:        body.Message.Content,
+		CreatedAt:      now,
 	}
-	saveMessageWithHistory(body.Message.ConversationID, body.UserID, "user", body.Message.Content)
+	_ = services.Store.PutMessage(context.Background(), userMsg)
 
-	// Basic fallback response (simulating GPT)
-	resp := fmt.Sprintf("You said: %s", body.Message.Content)
-	saveMessageWithHistory(body.Message.ConversationID, body.UserID, "chatbot", resp)
-
-	return jsonResponse(200, map[string]string{"response": resp}), nil
-}
-
-func lambdaFetchChatHistory(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	rows, err := services.DB.Query("SELECT userMessage, response, timestamp FROM ChatHistory ORDER BY timestamp DESC LIMIT 5")
-	if err != nil {
-		return errorResponse(500, "Failed to fetch chat history"), nil
+	// Simulated reply for now
+	botReply := fmt.Sprintf("You said: %s", body.Message.Content)
+	botMsg := services.ChatMessage{
+		ID:             generateULID(),
+		ConversationID: body.Message.ConversationID,
+		UserID:         body.UserID,
+		Role:           "chatbot",
+		Content:        botReply,
+		CreatedAt:      now.Add(time.Millisecond),
 	}
-	defer rows.Close()
+	_ = services.Store.PutMessage(context.Background(), botMsg)
 
-	var history []map[string]string
-	for rows.Next() {
-		var u, r, t string
-		_ = rows.Scan(&u, &r, &t)
-		history = append(history, map[string]string{"userMessage": u, "response": r, "timestamp": t})
-	}
-	return jsonResponse(200, map[string]interface{}{"history": history}), nil
+	return jsonResponse(200, map[string]string{"response": botReply}), nil
 }
 
 func lambdaDeleteConversation(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	id := strings.TrimPrefix(req.Path, "/api/AIchat/conversations/")
-	cid, _ := strconv.ParseInt(id, 10, 64)
-	if err := services.DeleteConversation(cid); err != nil {
+	conversationID := strings.TrimPrefix(req.Path, "/api/AIchat/conversations/")
+	err := services.Store.DeleteConversationCascade(context.Background(), conversationID)
+	if err != nil {
 		return errorResponse(500, err.Error()), nil
 	}
-	return jsonResponse(200, map[string]string{"conversationId": id}), nil
+	return jsonResponse(200, map[string]string{"conversationId": conversationID}), nil
+}
+
+func lambdaFetchChatHistory(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	userId := req.QueryStringParameters["userId"]
+	if userId == "" {
+		return errorResponse(400, "Missing userId"), nil
+	}
+	page, err := services.Store.ListUserMessagesSince(context.Background(), userId, time.Now().Add(-24*time.Hour), 50, "")
+	if err != nil {
+		return errorResponse(500, err.Error()), nil
+	}
+
+	var history []map[string]string
+	msgs := page.Items
+	for i := 0; i < len(msgs)-1; i++ {
+		if msgs[i].Role == "user" && msgs[i+1].Role == "chatbot" && msgs[i].ConversationID == msgs[i+1].ConversationID {
+			history = append(history, map[string]string{
+				"userMessage": msgs[i].Content,
+				"response":    msgs[i+1].Content,
+				"timestamp":   msgs[i+1].CreatedAt.Format(time.RFC3339),
+			})
+			i++ // skip the bot response in next loop
+		}
+		if len(history) == 5 {
+			break
+		}
+	}
+
+	return jsonResponse(200, map[string]interface{}{ "history": history }), nil
 }
 
 // ========== Helpers ==========
-
-func saveMessageWithHistory(convoId int64, userId, role, content string) {
-	_ = services.SaveMessage(convoId, role, content)
-}
 
 func jsonResponse(status int, data interface{}) events.APIGatewayProxyResponse {
 	body, _ := json.Marshal(data)
@@ -145,4 +177,8 @@ func jsonResponse(status int, data interface{}) events.APIGatewayProxyResponse {
 
 func errorResponse(status int, msg string) events.APIGatewayProxyResponse {
 	return jsonResponse(status, map[string]string{"error": msg})
+}
+
+func generateULID() string {
+	return services.GenerateULID() // you can implement this helper in dynamo_dal.go if needed
 }
