@@ -93,6 +93,22 @@ Resources:
         - AttributeName: createdAt
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
+  
+  ChatHistoryTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: ChatHistoryTableV3
+    AttributeDefinitions:
+      - AttributeName: userId
+        AttributeType: S
+      - AttributeName: createdAt
+        AttributeType: S
+    KeySchema:
+      - AttributeName: userId
+        KeyType: HASH
+      - AttributeName: createdAt
+        KeyType: RANGE
+    BillingMode: PAY_PER_REQUEST
 
   # ============ Lambda Functions ============
 
@@ -114,6 +130,7 @@ Resources:
           COGNITO_USER_POOL_CLIENT_ID: !Ref UserPoolClient
           COGNITO_ISSUER: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
           COGNITO_AUDIENCE: !Ref UserPoolClient
+          CHAT_HISTORY_TABLE: !Ref ChatHistoryTable
       Events:
         AIchatApi:
           Type: Api
