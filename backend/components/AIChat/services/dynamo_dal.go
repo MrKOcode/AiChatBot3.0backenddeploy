@@ -255,7 +255,7 @@ func (d *dynamoDAL) DeleteConversationCascade(ctx context.Context, conversationI
 			"SK": &types.AttributeValueMemberS{Value: skConv(conversationID)},
 		},
 	})
-	// Note: To delete the header, you need userID; do this delete in handler where you have the userID.
+	if err != nil {// Note: To delete the header, you need userID; do this delete in handler where you have the userID.
 	return nil
 }
 

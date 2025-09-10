@@ -76,7 +76,7 @@ Resources:
             UserPoolArn: !GetAtt UserPool.Arn
         DefaultAuthorizer: CognitoAuthorizer
 
-  # ============ DynamoDB Placeholder (Phase 2) ============
+  # ============ DynamoDB Tables ============
 
   ChatTable:
     Type: AWS::DynamoDB::Table
@@ -93,8 +93,8 @@ Resources:
         - AttributeName: createdAt
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
-  
-    ChatHistoryTable:
+
+  ChatHistoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: ChatHistoryTableV3
@@ -110,7 +110,6 @@ Resources:
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
 
-
   # ============ Lambda Functions ============
 
   AIChatFunction:
@@ -119,7 +118,7 @@ Resources:
       FunctionName: AIChatHandler
       Handler: main
       CodeUri: ./components/AIChat
-      Runtime: provided.al2
+      Runtime: go1.x
       Timeout: 30
       Policies:
         - DynamoDBCrudPolicy:
@@ -140,19 +139,22 @@ Resources:
             Path: /api/AIchat/{proxy+}
             Method: ANY
 
+            
+
   AuthFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: AuthHandler
       Handler: main
       CodeUri: ./components/Auth
-      Runtime: provided.al2
+      Runtime: go1.x
       Timeout: 15
       Environment:
         Variables:
           COGNITO_JWKS_URL: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}/.well-known/jwks.json"
           COGNITO_ISSUER: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
           COGNITO_AUDIENCE: !Ref UserPoolClient
+      Events:
         AuthApi:
           Type: Api
           Properties:
@@ -161,18 +163,18 @@ Resources:
             Method: ANY
 
 
+
   ChatHistoryFunction:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: ChatHistoryHandler
       Handler: main
       CodeUri: ./components/ChatHistory
-      Runtime: provided.al2
+      Runtime: go1.x
       Timeout: 20
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref ChatHistoryTable      
-         
+            TableName: !Ref ChatHistoryTable
       Events:
         SaveChat:
           Type: Api
@@ -192,6 +194,9 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /api/chat-history/admin/users
             Method: GET
+
+  # ============ Outputs ============
+
 
 Outputs:
   ApiEndpoint:
