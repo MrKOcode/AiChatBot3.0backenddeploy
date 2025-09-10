@@ -90,7 +90,7 @@ func lambdaFetchConversations(req events.APIGatewayProxyRequest) (events.APIGate
 	if err != nil {
 		return errorResponse(500, err.Error()), nil
 	}
-	return jsonResponse(200, map[string]interface{}{ "content": map[string]interface{}{ "data": page.Items }}), nil
+	return jsonResponse(200, map[string]interface{}{"content": map[string]interface{}{"data": page.Items}}), nil
 }
 
 func lambdaSendMessage(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -161,7 +161,7 @@ func lambdaFetchChatHistory(req events.APIGatewayProxyRequest) (events.APIGatewa
 		}
 	}
 
-	return jsonResponse(200, map[string]interface{}{ "history": history }), nil
+	return jsonResponse(200, map[string]interface{}{"history": history}), nil
 }
 
 // ========== Helpers ==========

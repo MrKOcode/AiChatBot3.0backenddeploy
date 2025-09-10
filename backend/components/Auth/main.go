@@ -1,130 +1,71 @@
-// ✅ auth.go - Lambda-Compatible Version (Phase 1)
-
 package main
 
 import (
-	"encoding/json"
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
 	"strings"
+	"time"
 
+	"github.com/MicahParks/keyfunc"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/joho/godotenv"
-
-	"github.com/MrKOcode/AiChatBot3.0backenddeploy/backend/components/Auth/services"
+	"github.com/golang-jwt/jwt/v5"
 )
 
-func main() {
-	_ = godotenv.Load(".env")
-	services.InitDB()
-	lambda.Start(handler)
-}
+var jwks *keyfunc.JWKS
 
-func handler(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	switch req.HTTPMethod {
-	case "POST":
-		if req.Path == "/api/auth/register" {
-			return lambdaRegisterUser(req)
-		}
-		if req.Path == "/api/auth/login" {
-			return lambdaLoginUser(req)
-		}
-	case "GET":
-		if strings.HasPrefix(req.Path, "/api/auth/user/") {
-			return lambdaGetUserInfo(req)
-		}
-	}
-	return errorResponse(404, "Route not found"), nil
-}
-
-func lambdaRegisterUser(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	var body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	_ = json.Unmarshal([]byte(req.Body), &body)
-
-	if len(body.Username) < 3 || len(body.Password) < 6 {
-		return errorResponse(400, "Username or password too short"), nil
+func init() {
+	jwksURL := os.Getenv("COGNITO_JWKS_URL")
+	if jwksURL == "" {
+		log.Fatal("COGNITO_JWKS_URL not set in environment")
 	}
 
-	exists, err := services.UserExists(body.Username)
+	var err error
+	jwks, err = keyfunc.Get(jwksURL, keyfunc.Options{
+		RefreshInterval: time.Hour,
+	})
 	if err != nil {
-		return errorResponse(500, "Database error"), nil
+		log.Fatalf("Failed to get JWKS: %v", err)
 	}
-	if exists {
-		return errorResponse(409, "Username already taken"), nil
-	}
-
-	userID, err := services.CreateUser(body.Username, body.Password)
-	if err != nil {
-		return errorResponse(500, "Create user failed"), nil
-	}
-
-	role := determineRole(body.Username)
-	return jsonResponse(201, map[string]interface{}{
-		"message":  "User registered successfully",
-		"userId":   userID,
-		"role":     role,
-		"username": body.Username,
-	}), nil
 }
 
-func lambdaLoginUser(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	var body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	_ = json.Unmarshal([]byte(req.Body), &body)
-
-	user, err := services.ValidateUser(body.Username, body.Password)
-	if err != nil {
-		if err.Error() == "user not found" || err.Error() == "invalid password" {
-			return errorResponse(401, "Username or password is incorrect"), nil
-		}
-		return errorResponse(500, "Database error"), nil
+func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	authHeader := req.Headers["Authorization"]
+	if authHeader == "" {
+		return response(http.StatusUnauthorized, "Missing Authorization header"), nil
 	}
 
-	return jsonResponse(200, map[string]interface{}{
-		"message":  "Login successful",
-		"userId":   user.ID,
-		"username": user.Username,
-		"role":     user.Role,
-	}), nil
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	token, err := jwt.Parse(tokenStr, jwks.Keyfunc)
+	if err != nil || !token.Valid {
+		return response(http.StatusUnauthorized, "Invalid token"), nil
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return response(http.StatusInternalServerError, "Invalid claims"), nil
+	}
+
+	// You can access specific fields like:
+	sub := claims["sub"]
+	email := claims["email"]
+	// Return these as confirmation
+	msg := fmt.Sprintf("Authenticated: sub=%v, email=%v", sub, email)
+
+	return response(http.StatusOK, msg), nil
 }
 
-func lambdaGetUserInfo(req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	id := strings.TrimPrefix(req.Path, "/api/auth/user/")
-	user, err := services.GetUserByID(id)
-	if err != nil {
-		if err.Error() == "user not found" {
-			return errorResponse(404, "User not found"), nil
-		}
-		return errorResponse(500, "Database error"), nil
-	}
-
-	return jsonResponse(200, map[string]interface{}{
-		"userId":   user.ID,
-		"username": user.Username,
-		"role":     user.Role,
-	}), nil
-}
-
-func determineRole(username string) string {
-	if strings.HasPrefix(strings.ToLower(username), "admin") {
-		return "admin"
-	}
-	return "student"
-}
-
-func jsonResponse(status int, data interface{}) events.APIGatewayProxyResponse {
-	body, _ := json.Marshal(data)
+func response(status int, msg string) events.APIGatewayProxyResponse {
 	return events.APIGatewayProxyResponse{
 		StatusCode: status,
-		Body:       string(body),
-		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       msg,
 	}
 }
 
-func errorResponse(status int, msg string) events.APIGatewayProxyResponse {
-	return jsonResponse(status, map[string]string{"error": msg})
+func main() {
+	lambda.Start(handler)
 }

@@ -132,7 +132,7 @@ Resources:
       Timeout: 15
       Environment:
         Variables:
-          DB_PATH: ./auth.db
+          COGNITO_JWKS_URL: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}/.well-known/jwks.json"
       Events:
         AuthApi:
           Type: Api
@@ -140,6 +140,7 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /api/auth/{proxy+}
             Method: ANY
+
 
   ChatHistoryFunction:
     Type: AWS::Serverless::Function
@@ -149,9 +150,8 @@ Resources:
       CodeUri: ./components/ChatHistory
       Runtime: provided.al2
       Timeout: 20
-      Environment:
-        Variables:
-          CHAT_HISTORY_DB_PATH: ./chat_history.db
+      
+         
       Events:
         SaveChat:
           Type: Api
