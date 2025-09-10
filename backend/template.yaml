@@ -94,21 +94,22 @@ Resources:
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
   
-  ChatHistoryTable:
-  Type: AWS::DynamoDB::Table
-  Properties:
-    TableName: ChatHistoryTableV3
-    AttributeDefinitions:
-      - AttributeName: userId
-        AttributeType: S
-      - AttributeName: createdAt
-        AttributeType: S
-    KeySchema:
-      - AttributeName: userId
-        KeyType: HASH
-      - AttributeName: createdAt
-        KeyType: RANGE
-    BillingMode: PAY_PER_REQUEST
+    ChatHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ChatHistoryTableV3
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      BillingMode: PAY_PER_REQUEST
+
 
   # ============ Lambda Functions ============
 
@@ -150,7 +151,8 @@ Resources:
       Environment:
         Variables:
           COGNITO_JWKS_URL: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}/.well-known/jwks.json"
-      Events:
+          COGNITO_ISSUER: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+          COGNITO_AUDIENCE: !Ref UserPoolClient
         AuthApi:
           Type: Api
           Properties:
@@ -167,7 +169,9 @@ Resources:
       CodeUri: ./components/ChatHistory
       Runtime: provided.al2
       Timeout: 20
-      
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ChatHistoryTable      
          
       Events:
         SaveChat:
